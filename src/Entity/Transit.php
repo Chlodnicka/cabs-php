@@ -7,6 +7,7 @@ namespace LegacyFighter\Cabs\Entity;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping\Column;
+use Doctrine\ORM\Mapping\Embedded;
 use Doctrine\ORM\Mapping\Entity;
 use Doctrine\ORM\Mapping\JoinTable;
 use Doctrine\ORM\Mapping\ManyToMany;
@@ -14,13 +15,12 @@ use Doctrine\ORM\Mapping\ManyToOne;
 use Doctrine\ORM\Mapping\OneToMany;
 use Doctrine\ORM\Mapping\OneToOne;
 use LegacyFighter\Cabs\Common\BaseEntity;
+use LegacyFighter\Cabs\Distance\Distance;
 use LegacyFighter\Cabs\Money\Money;
 
 #[Entity]
 class Transit extends BaseEntity
 {
-    public const BASE_FEE = 8;
-
     public const STATUS_DRAFT = 'draft';
     public const STATUS_CANCELLED = 'cancelled';
     public const STATUS_WAITING_FOR_DRIVER_ASSIGNMENT = 'waiting-for-driver-assigment';
@@ -91,8 +91,8 @@ class Transit extends BaseEntity
     #[Column(type: 'integer')]
     private int $awaitingDriversResponses = 0;
 
-    #[Column(type: 'integer', nullable: true)]
-    private ?int $factor = null;
+    #[Embedded(class: Tariff::class)]
+    private Tariff $tariff;
 
     #[Column(type: 'float', nullable: true)]
     private ?float $km = null;
@@ -266,24 +266,14 @@ class Transit extends BaseEntity
         $this->awaitingDriversResponses = $awaitingDriversResponses;
     }
 
-    public function getFactor(): ?int
+    public function getKm(): ?Distance
     {
-        return $this->factor;
+        return $this->km === null ? null : Distance::ofKm($this->km);
     }
 
-    public function setFactor(int $factor): void
+    public function setKm(Distance $km): void
     {
-        $this->factor = $factor;
-    }
-
-    public function getKm(): ?float
-    {
-        return $this->km;
-    }
-
-    public function setKm(float $km): void
-    {
-        $this->km = $km;
+        $this->km = $km->toKmInFloat();
         $this->estimateCost();
     }
 
@@ -320,6 +310,7 @@ class Transit extends BaseEntity
 
     public function setDateTime(?\DateTimeImmutable $dateTime): void
     {
+        $this->tariff = Tariff::ofTime($dateTime);
         $this->dateTime = $dateTime;
     }
 
@@ -367,49 +358,9 @@ class Transit extends BaseEntity
 
     private function calculateCost(): Money
     {
-        $baseFee = self::BASE_FEE;
-        $factorToCalculate = $this->factor;
-        if($factorToCalculate == null) {
-            $factorToCalculate = 1;
-        }
-        $day = $this->dateTime;
-        // wprowadzenie nowych cennikow od 1.01.2019
-        if((int) $day->format('Y') <= 2018) {
-            $kmRate = 1.0;
-            $baseFee++;
-        } else {
-            if(($day->format('n') === '12' && $day->format('j') === '31') ||
-                ($day->format('n') === '1' && $day->format('j') === '1' && (int) $day->format('G') <= 6)
-            ) {
-                $kmRate = 3.50;
-                $baseFee += 3;
-            } else {
-                // piątek i sobota po 17 do 6 następnego dnia
-                if(($day->format('l') === 'Friday' && (int) $day->format('G') >= 17) ||
-                    ($day->format('l') === 'Saturday' && (int) $day->format('G') <= 6) ||
-                    ($day->format('l') === 'Saturday' && (int) $day->format('G') >= 17) ||
-                    ($day->format('l') === 'Sunday' && (int) $day->format('G') <= 6)
-                ) {
-                    $kmRate = 2.50;
-                    $baseFee += 2;
-                } else {
-                    // pozostałe godziny weekendu
-                    if(($day->format('l') === 'Saturday' && (int) $day->format('G') > 6 && (int) $day->format('G') < 17) ||
-                        ($day->format('l') === 'Sunday' && (int) $day->format('G') > 6)
-                    ) {
-                        $kmRate = 1.5;
-                    } else {
-                        // tydzień roboczy
-                        $kmRate = 1.0;
-                        $baseFee++;
-                    }
-                }
-            }
-        }
-
-        $finalPrice = Money::from((int) ceil(($this->km * $kmRate * $factorToCalculate + $baseFee) * 100));
-        $this->price = $finalPrice;
-        return $this->price;
+        $money = $this->tariff->calculateCost(Distance::ofKm($this->km));
+        $this->price = $money;
+        return $money;
     }
 
     public function getDriver(): ?Driver
@@ -440,5 +391,10 @@ class Transit extends BaseEntity
     public function setCarType(?string $carType): void
     {
         $this->carType = $carType;
+    }
+
+    public function getTariff(): Tariff
+    {
+        return $this->tariff;
     }
 }

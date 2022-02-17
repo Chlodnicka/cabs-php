@@ -2,6 +2,7 @@
 
 namespace LegacyFighter\Cabs\Tests\Unit\Entity;
 
+use LegacyFighter\Cabs\Distance\Distance;
 use LegacyFighter\Cabs\Entity\Transit;
 use LegacyFighter\Cabs\Money\Money;
 use LegacyFighter\Cabs\Tests\Common\PrivateProperty;
@@ -69,13 +70,81 @@ class CalculateTransitPriceTest extends TestCase
         self::assertEquals(Money::from(2900), $price); //29.00
     }
 
+    /**
+     * @test
+     */
+    public function calculatePriceOnSunday(): void
+    {
+        //given
+        $transit = $this->transit(Transit::STATUS_COMPLETED, 20);
+        //and
+        $this->transitWasDoneOnSunday($transit);
+
+        //when
+        $price = $transit->calculateFinalCosts();
+
+        //then
+        self::assertEquals(Money::from(3800), $price); //39.00
+    }
+
+    /**
+     * @test
+     */
+    public function calculatePriceOnNewYearsEve(): void
+    {
+        //given
+        $transit = $this->transit(Transit::STATUS_COMPLETED, 20);
+        //and
+        $this->transitWasDoneOnNewYearsEve($transit);
+
+        //when
+        $price = $transit->calculateFinalCosts();
+
+        //then
+        self::assertEquals(Money::from(8100), $price); //81.00
+    }
+
+    /**
+     * @test
+     */
+    public function calculatePriceOnSaturday(): void
+    {
+        //given
+        $transit = $this->transit(Transit::STATUS_COMPLETED, 20);
+        //and
+        $this->transitWasDoneOnSaturday($transit);
+
+        //when
+        $price = $transit->calculateFinalCosts();
+
+        //then
+        self::assertEquals(Money::from(3800), $price); //38.00
+    }
+
+    /**
+     * @test
+     */
+    public function calculatePriceOnSaturdayNight(): void
+    {
+        //given
+        $transit = $this->transit(Transit::STATUS_COMPLETED, 20);
+        //and
+        $this->transitWasDoneOnSaturdayNight($transit);
+
+        //when
+        $price = $transit->calculateFinalCosts();
+
+        //then
+        self::assertEquals(Money::from(6000), $price); //60.00
+    }
+
     private function transit(string $status, float $km): Transit
     {
         $transit = new Transit();
         PrivateProperty::setId(1, $transit);
         $transit->setDateTime(new \DateTimeImmutable());
         $transit->setStatus(Transit::STATUS_DRAFT);
-        $transit->setKm($km);
+        $transit->setKm(Distance::ofKm($km));
         $transit->setStatus($status);
         return $transit;
     }
@@ -83,5 +152,25 @@ class CalculateTransitPriceTest extends TestCase
     private function transitWasOnDoneOnFriday(Transit $transit): void
     {
         $transit->setDateTime(new \DateTimeImmutable('2021-04-16 08:30'));
+    }
+
+    private function transitWasDoneOnNewYearsEve(Transit $transit): void
+    {
+        $transit->setDateTime(new \DateTimeImmutable('2021-12-31 08:30'));
+    }
+
+    private function transitWasDoneOnSaturday(Transit $transit): void
+    {
+        $transit->setDateTime(new \DateTimeImmutable('2021-04-17 08:30'));
+    }
+
+    private function transitWasDoneOnSunday(Transit $transit): void
+    {
+        $transit->setDateTime(new \DateTimeImmutable('2021-04-18 08:30'));
+    }
+
+    private function transitWasDoneOnSaturdayNight(Transit $transit): void
+    {
+        $transit->setDateTime(new \DateTimeImmutable('2021-04-17 19:30'));
     }
 }

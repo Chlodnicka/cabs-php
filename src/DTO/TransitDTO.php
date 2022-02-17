@@ -2,6 +2,7 @@
 
 namespace LegacyFighter\Cabs\DTO;
 
+use LegacyFighter\Cabs\Distance\Distance;
 use LegacyFighter\Cabs\Entity\Transit;
 
 class TransitDTO implements \JsonSerializable
@@ -11,7 +12,7 @@ class TransitDTO implements \JsonSerializable
     private string $status;
     public ?DriverDTO $driver = null;
     public ?int $factor;
-    private ?float $distance;
+    private ?Distance $distance;
     private string $distanceUnit;
     private float $kmRate;
     private ?float $price = null;
@@ -38,7 +39,7 @@ class TransitDTO implements \JsonSerializable
     {
         $this->id = $transit->getId();
         $this->distance = $transit->getKm();
-        $this->factor = $transit->getFactor();
+        $this->factor = 1;
         if($transit->getPrice()!== null) {
             $this->price = (float) $transit->getPrice()->toInt();
         }
@@ -72,59 +73,9 @@ class TransitDTO implements \JsonSerializable
 
     private function setTariff(Transit $transit): void
     {
-        $date = new \DateTimeImmutable();
-
-        // wprowadzenie nowych cennikow od 1.01.2019
-        if((int) $date->format('Y') <= 2018) {
-            $this->kmRate = 1.0;
-            $this->tariff = 'Standard';
-            return;
-        }
-
-        $year = (int) $date->format('Y');
-        $leap = (($year % 4 === 0) && ($year % 100 !== 0)) || ($year % 400 === 0);
-
-        if(($leap && (int) $date->format('z') === 365) || (!$leap && (int) $date->format('z') === 364) || ((int) $date->format('z') === 0 && (int) $date->format('H') < 6)) {
-            $this->tariff = 'Sylwester';
-            $this->kmRate = 3.5;
-        } else {
-            switch ((int) $date->format('l')) {
-                case 'Monday':
-                case 'Tuesday':
-                case 'Wednesday':
-                case 'Thursday':
-                    $this->kmRate = 1.0;
-                    $this->tariff = 'Standard';
-                    break;
-                case 'Friday':
-                    if((int) $date->format('H') < 17) {
-                        $this->tariff = 'Standard';
-                        $this->kmRate = 1.0;
-                    } else {
-                        $this->tariff = 'Weekend+';
-                        $this->kmRate = 2.5;
-                    }
-                    break;
-                case 'Saturday':
-                    if((int) $date->format('H') < 6 || (int) $date->format('H') >= 17) {
-                        $this->kmRate = 2.5;
-                        $this->tariff = 'Weekend+';
-                    } else if ((int) $date->format('H') < 17) {
-                        $this->kmRate = 1.5;
-                        $this->tariff = 'Weekend';
-                    }
-                    break;
-                case 'Sunday':
-                    if((int) $date->format('H') < 6) {
-                        $this->kmRate = 2.5;
-                        $this->tariff = 'Weekend+';
-                    } else {
-                        $this->kmRate = 1.5;
-                        $this->tariff = 'Weekend';
-                    }
-                    break;
-            }
-        }
+        $this->tariff = $transit->getTariff()->getName();
+        $this->kmRate = $transit->getTariff()->getKmRate();
+        $this->baseFee = $transit->getTariff()->getBaseFee();
     }
 
     public function getId(): int
@@ -160,23 +111,7 @@ class TransitDTO implements \JsonSerializable
     public function getDistance(string $unit): string
     {
         $this->distanceUnit = $unit;
-        if($unit === 'km') {
-            if($this->distance === ceil($this->distance)) {
-                return sprintf('%d', round($this->distance)).'km';
-            }
-            return sprintf('%.3f', $this->distance).'km';
-        }
-        if($unit === 'miles') {
-            $distance = $this->distance / 1.609344;
-            if($distance === ceil($distance)) {
-                return sprintf('%d', round($distance)).'miles';
-            }
-            return sprintf('%.3f', $distance).'miles';
-        }
-        if($unit === 'm') {
-            return sprintf('%d', round($this->distance * 1000)).'m';
-        }
-        throw new \InvalidArgumentException('Invalid unit '.$unit);
+        return $this->distance->printIn($unit);
     }
 
     public function getDriverFee(): float
