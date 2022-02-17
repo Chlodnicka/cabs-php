@@ -1,14 +1,55 @@
 version: '3'
 
 services:
+#  debug:
+#    image: phpstorm/php-apache:8.0-xdebug3.0
+#    ports:
+#      - "8080:80"
+#    volumes:
+#      - ./:/var/www/html
+#    environment:
+#      XDEBUG_CONFIG: host.docker.internal
+#    networks:
+#      - cabs
+  web:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/default.conf:/etc/nginx/conf.d/default.conf
+    links:
+      - php-fpm
+      - database
+    networks:
+      - cabs
+  php-fpm:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ./:/var/www/html
+      - ./docker/conf.d/xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+      - ./docker/conf.d/error_reporting.ini:/usr/local/etc/php/conf.d/error_reporting.ini
+      - ./.docker/conf/php/php.ini:/usr/local/etc/php/conf.d/php.ini
+    networks:
+      - cabs
+    links:
+      - database
 ###> doctrine/doctrine-bundle ###
   database:
-    image: postgres:${POSTGRES_VERSION:-13}-alpine
+    image: postgres:13-alpine
+    container_name: cabs_db
+    ports:
+      - "5432:5432"
+    networks:
+      - cabs
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-app}
-      # You should definitely change the password in production
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMe}
-      POSTGRES_USER: ${POSTGRES_USER:-symfony}
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD: ChangeMe
+      POSTGRES_USER: symfony
+    restart: always
     volumes:
       - db-data:/var/lib/postgresql/data:rw
       # You may use a bind-mounted host directory instead, so that it is harder to accidentally remove the volume and lose all your data!
@@ -19,3 +60,7 @@ volumes:
 ###> doctrine/doctrine-bundle ###
   db-data:
 ###< doctrine/doctrine-bundle ###
+
+networks:
+  cabs:
+    driver: bridge
